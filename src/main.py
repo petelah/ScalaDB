@@ -8,11 +8,7 @@ import datetime
 
 # Start SQLAlchemy Session and Engine
 Base = declarative_base()
-engine = create_engine('sqlite:///scala.db')
-Base.metadata.create_all(bind=engine)
-Session = sessionmaker(bind=engine)
-# Create the session for connecting to db
-session = Session()
+
 
 # DB Records
 class User(Base):
@@ -21,7 +17,7 @@ class User(Base):
 	ID: Primary Key
 	Username: Name of the player
 	RoundsWon/Lost: Accumulated rounds won or lost
-	GamessWon/Lost: Accumulated gamess won or lost
+	GamesWon/Lost: Accumulated games won or lost
 	RoundStreak/Lost: Accumulated rounds won or lost in a row
 	"""""
 	__tablename__ = "User"
@@ -54,7 +50,9 @@ class GameMaster(Base):
 	Player1_c_points = Column(Integer, default=0)
 	Player2_c_points = Column(Integer, default=0)
 	MaxPoints = Column(Integer)
+	Winner = Column(String, default="None")
 	CreatedAt = Column(DateTime, default=datetime.datetime.utcnow)
+	CompletedAt = Column(DateTime, default=datetime.datetime.utcnow)
 	Enabled = Column(Boolean, default=1)
 
 class SubGame(Base):
@@ -75,6 +73,12 @@ class SubGame(Base):
 
 	idGame = Column(Integer)
 
+engine = create_engine('sqlite:///scala.db')
+Base.metadata.create_all(bind=engine)
+Session = sessionmaker(bind=engine)
+# Create the session for connecting to db
+session = Session()
+
 # Main Functions
 def menu(**kwargs):
 	# Clear terminal
@@ -91,18 +95,27 @@ def menu(**kwargs):
 	# - View current games
 	# - View Stats
 	# Input selection
-	menu_select = input_validator("Enter your selection [1-4]", int)
-	if menu_select == 1:
-		create_game()
-	elif menu_select == 2:
-		getid = current_games(return_id=1)
-		add_subgame(id=getid)
-	elif menu_select == 3:
-		current_games()
-	elif menu_select == 4:
-		view_stats()
-	elif menu_select == 5:
-		print_help()
+	while True:
+		menu_select = input_validator("Enter your selection [1-7]", int)
+		if menu_select == 1:
+			create_game()
+		elif menu_select == 2:
+			getid = current_games(return_id=1)
+			add_subgame(id=getid)
+		elif menu_select == 3:
+			current_games()
+		elif menu_select == 4:
+			finished_games()
+		elif menu_select == 5:
+			view_stats()
+		elif menu_select == 6:
+			print_help()
+		elif menu_select == 7:
+			print("Goodbye!")
+			exit()
+		elif menu_select > 7:
+			print("Invalid input, enter [1-7]!")
+
 
 
 def create_game(**kwargs):
@@ -155,6 +168,8 @@ def add_subgame(id, **kwargs):
 	if current_game.Player1_c_points > current_game.MaxPoints or current_game.Player2_c_points > current_game.MaxPoints > current_game.MaxPoints:
 		# If they are then end the game (Enabled = 0)
 		current_game.Enabled = 0
+		current_game.Winner = round_winner.username
+		current_game.CompletedAt = datetime.datetime.utcnow
 		print("Game Over")
 		print(f"{round_winner.username} is the winner!")
 		if player1_points < player2_points:
@@ -209,10 +224,28 @@ def current_games(return_id=0):
 			print(f"ID: {instance.idGame} | {player1.username}: {instance.Player1_c_points} | {player2.username}: {instance.Player2_c_points} | Max Points: {instance.MaxPoints} | Started: {instance.CreatedAt.date()}")
 			for ix, sub_instance in enumerate(session.query(SubGame).order_by(SubGame.idGame)):
 				if sub_instance.idGame == instance.idGame:
-					print(f"----{ix+1}. {player1.username}: {sub_instance.Player1_points} | {player2.username}: {sub_instance.Player2_points} | Winner: {sub_instance.winner} | Played: {sub_instance.DatePlayed.date()}")
+					print(f"--->{ix+1}. {player1.username}: {sub_instance.Player1_points} | {player2.username}: {sub_instance.Player2_points} | Winner: {sub_instance.winner} | Played: {sub_instance.DatePlayed.date()}")
 	if return_id == 1:
 		getid = input_validator("Enter ID of game you wish to add to", int)
 		return getid
+
+
+def finished_games():
+	print("Finished Games:")
+	for index, instance in enumerate(session.query(GameMaster).order_by(GameMaster.idGame)):
+		if not instance:
+			print("No games are current.")
+		if not instance.Enabled:
+			player1 = session.query(User).filter_by(id=instance.Player1).first()
+			player2 = session.query(User).filter_by(id=instance.Player2).first()
+			print(
+				f"ID: {instance.idGame} | "
+				f"{player1.username}: {instance.Player1_c_points} | "
+				f"{player2.username}: {instance.Player2_c_points} | "
+				f"Max Points: {instance.MaxPoints} | "
+				f"Winner: {instance.Winner} | "
+				f"Started: {instance.CreatedAt.date()} | "
+				f"Finished: {instance.CompletedAt.date()}")
 
 
 # Terminal flag input
